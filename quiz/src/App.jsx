@@ -9,6 +9,12 @@ import Error from "./Error";
 import StartScreen from "./StartScreen";
 import Question from "./Question";
 import NextButton from "./components/NextButton";
+import Progress from "./components/Progress";
+import FinishScreen from "./components/FinishScreen";
+import Timer from "./components/Timer";
+import Footer from "./components/Footer";
+
+const SECS_PER_QUESTION = 30;
 
 const initialState = {
 	questions: [],
@@ -19,6 +25,7 @@ const initialState = {
 	answer: null,
 	highscore: 0,
 	points: 0,
+	secondsRemaining: null,
 };
 
 function reducer(state, action) {
@@ -39,14 +46,16 @@ function reducer(state, action) {
 			return {
 				...state,
 				status: "active",
+				secondsRemaining: state.questions.length * SECS_PER_QUESTION,
 			};
 		case "newAnswer":
 			return {
 				...state,
 				answer: action.payload,
 				points:
-					action.payload === state.questions.correctOption
-						? state.points + state.questions.points
+					action.payload ===
+					state.questions[state.index].correctOption
+						? state.points + state.questions[state.index].points
 						: state.points,
 			};
 		case "nextQuestion":
@@ -60,6 +69,20 @@ function reducer(state, action) {
 						? state.points
 						: state.highscore,
 			};
+		case "restart":
+			return {
+				...initialState,
+				questions: state.questions,
+				status: "ready",
+				highscore: state.highscore,
+			};
+		case "timeReduce":
+			return {
+				...state,
+				secondsRemaining: state.secondsRemaining - 1,
+				status:
+					state.secondsRemaining === 0 ? "finished" : state.status,
+			};
 		default:
 			throw new Error("Action unkonwn");
 	}
@@ -67,13 +90,30 @@ function reducer(state, action) {
 
 function App() {
 	const [state, dispatch] = useReducer(reducer, initialState);
-	const { questions, status, index, answer, highscore } = state;
+	const {
+		questions,
+		status,
+		index,
+		answer,
+		highscore,
+		points,
+		secondsRemaining,
+	} = state;
 	useEffect(function () {
 		fetch("http://localhost:9000/questions")
 			.then((res) => res.json())
 			.then((data) => dispatch({ type: "dataReceived", payload: data }))
 			.catch((err) => dispatch({ type: "dataFailed" }));
 	}, []);
+
+	const total = questions.reduce(
+		(sum, curQuestion) => (sum += curQuestion.points),
+		0
+	);
+
+	// let total = 0;
+	// questions.map((question) => (total += question.points));
+
 	return (
 		<div className="app">
 			<Header></Header>
@@ -88,18 +128,40 @@ function App() {
 				)}
 				{status === "active" && (
 					<div>
+						<Progress
+							index={index}
+							numQuestions={questions.length}
+							points={points}
+							maxPossiblePoints={total}
+							answer={answer}
+							questionPoint={questions[index].points}
+						></Progress>
 						<Question
 							question={questions[index]}
 							dispatch={dispatch}
 							answer={answer}
 						></Question>
-						<NextButton
-							dispatch={dispatch}
-							index={index}
-							numQuestions={questions.length}
-							answer={answer}
-						></NextButton>
+						<Footer>
+							<Timer
+								dispatch={dispatch}
+								secondsRemaining={secondsRemaining}
+							></Timer>{" "}
+							<NextButton
+								dispatch={dispatch}
+								index={index}
+								numQuestions={questions.length}
+								answer={answer}
+							></NextButton>
+						</Footer>
 					</div>
+				)}
+				{status === "finished" && (
+					<FinishScreen
+						points={points}
+						maxPossiblePoints={total}
+						highscore={highscore}
+						dispatch={dispatch}
+					/>
 				)}
 			</Content>
 		</div>
